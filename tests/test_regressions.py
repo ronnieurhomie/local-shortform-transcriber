@@ -8,13 +8,13 @@ from unittest.mock import patch
 import numpy as np
 from fastapi import HTTPException, UploadFile
 
-from app.extractor import ExtractionError, _validate_social_url
+from app.extractor import ExtractionError, _validate_social_url, audio_from_url
 from app.main import transcribe_upload
 from app.transcriber import LocalTranscriber
 
 
 class URLValidationTests(unittest.TestCase):
-    def test_accepts_https_tiktok_and_instagram(self):
+    def test_accepts_approved_https_platforms(self):
         self.assertEqual(
             _validate_social_url("https://www.tiktok.com/@creator/video/123")[1],
             "tiktok",
@@ -25,6 +25,14 @@ class URLValidationTests(unittest.TestCase):
         )
         self.assertEqual(_validate_social_url("https://youtu.be/example")[1], "youtube")
         self.assertEqual(_validate_social_url("https://x.com/user/status/123")[1], "x")
+        self.assertEqual(
+            _validate_social_url("https://www.xiaohongshu.com/explore/abc123")[1],
+            "xiaohongshu",
+        )
+        self.assertEqual(
+            _validate_social_url("https://xhslink.com/a/example")[1],
+            "xiaohongshu",
+        )
 
     def test_rejects_non_https(self):
         with self.assertRaisesRegex(ExtractionError, "Only HTTPS"):
@@ -34,15 +42,23 @@ class URLValidationTests(unittest.TestCase):
         for url in (
             "https://example.com/video",
             "https://tiktok.com.evil.example/video",
+            "https://xiaohongshu.com.evil.example/explore/abc123",
         ):
             with self.subTest(url=url), self.assertRaisesRegex(
-                ExtractionError, "only public TikTok, Instagram, YouTube, or X"
+                ExtractionError, "only public TikTok, Instagram, YouTube, X, or Xiaohongshu"
             ):
                 _validate_social_url(url)
 
     def test_rejects_credentials(self):
         with self.assertRaisesRegex(ExtractionError, "credentials"):
             _validate_social_url("https://user:pass@www.instagram.com/reel/example/")
+
+    def test_xiaohongshu_block_has_useful_fallback_message(self):
+        with (
+            patch("app.extractor._yt_dlp_media", side_effect=RuntimeError("CAPTCHA")),
+            self.assertRaisesRegex(ExtractionError, "upload the saved video"),
+        ):
+            audio_from_url("https://www.xiaohongshu.com/explore/abc123")
 
 
 class UploadCleanupTests(unittest.IsolatedAsyncioTestCase):

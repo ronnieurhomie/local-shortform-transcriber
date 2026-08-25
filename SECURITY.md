@@ -5,7 +5,7 @@ This is a small local-only tool, not a public web service.
 ## Deliberate protections
 - Server binds only to `127.0.0.1`; it is not exposed to your LAN or internet.
 - Trusted Host middleware accepts only `localhost` and `127.0.0.1`.
-- URL input is restricted to HTTPS URLs on TikTok, Instagram, YouTube, and X domains.
+- URL input is restricted to HTTPS URLs on TikTok, Instagram, YouTube, X, and Xiaohongshu domains.
 - No shell execution with user-provided text.
 - No browser cookies, login credentials, API keys, or browser profiles are read.
 - URL transcription does not intentionally save the source video.
@@ -17,7 +17,7 @@ This is a small local-only tool, not a public web service.
 
 ## External network access
 The tool still needs internet access for:
-1. TikTok, Instagram, YouTube, or X media retrieval.
+1. TikTok, Instagram, YouTube, X, or Xiaohongshu media retrieval.
 2. Installing Python dependencies during first setup.
 3. Downloading the faster-whisper model on first transcription.
 

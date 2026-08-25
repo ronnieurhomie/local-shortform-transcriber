@@ -37,6 +37,10 @@ ALLOWED_SOCIAL_HOSTS = {
     "twitter.com",
     "www.twitter.com",
     "mobile.twitter.com",
+    "xiaohongshu.com",
+    "www.xiaohongshu.com",
+    "xhslink.com",
+    "www.xhslink.com",
 }
 
 MAX_AUDIO_SECONDS = 15 * 60
@@ -48,11 +52,11 @@ def _validate_social_url(url: str) -> tuple[str, str]:
         raise ExtractionError("Invalid URL.")
 
     if parsed.scheme != "https":
-        raise ExtractionError("Only HTTPS TikTok, Instagram, YouTube, or X URLs are allowed.")
+        raise ExtractionError("Only HTTPS TikTok, Instagram, YouTube, X, or Xiaohongshu URLs are allowed.")
 
     host = (parsed.hostname or "").lower().rstrip(".")
     if host not in ALLOWED_SOCIAL_HOSTS:
-        raise ExtractionError("For safety, only public TikTok, Instagram, YouTube, or X URLs are accepted.")
+        raise ExtractionError("For safety, only public TikTok, Instagram, YouTube, X, or Xiaohongshu URLs are accepted.")
 
     if parsed.username or parsed.password:
         raise ExtractionError("URLs containing credentials are not allowed.")
@@ -63,6 +67,8 @@ def _validate_social_url(url: str) -> tuple[str, str]:
         platform = "instagram"
     elif "youtube" in host or host == "youtu.be":
         platform = "youtube"
+    elif "xiaohongshu" in host or "xhslink" in host:
+        platform = "xiaohongshu"
     else:
         platform = "x"
     return url.strip(), platform
@@ -261,7 +267,16 @@ def audio_from_url(url: str, progress: Callable[[str], None] | None = None) -> n
             errors.append(f"TikWM fallback: {_clean_error(e)[-220:]}")
 
     detail = " | ".join(errors)
-    method_summary = "Direct extraction and the TikTok fallback failed" if platform == "tiktok" else "Direct extraction failed"
+    if platform == "tiktok":
+        method_summary = "Direct extraction and the TikTok fallback failed"
+    elif platform == "xiaohongshu":
+        method_summary = (
+            "Xiaohongshu extraction failed. Public links are supported on a best-effort basis, "
+            "but Xiaohongshu may require a CAPTCHA or login. Try the canonical www.xiaohongshu.com "
+            "link or upload the saved video"
+        )
+    else:
+        method_summary = "Direct extraction failed"
     raise ExtractionError(
         f"{method_summary}. The video may be unavailable, private, unsupported, or temporarily blocked. "
         "No login or browser cookies were used. "

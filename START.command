@@ -7,7 +7,7 @@ echo "Local Shortform Transcriber — hardened local build"
 echo "=========================================="
 echo ""
 echo "This app binds ONLY to 127.0.0.1 (your Mac)."
-echo "It accepts ONLY TikTok, Instagram, YouTube, and X HTTPS URLs."
+echo "It accepts ONLY TikTok, Instagram, YouTube, X, and Xiaohongshu HTTPS URLs."
 echo "It does not ask for passwords, cookies, browser profiles, or API keys."
 echo ""
 
