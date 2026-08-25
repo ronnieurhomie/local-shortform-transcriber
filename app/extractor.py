@@ -11,6 +11,14 @@ from urllib.request import Request, urlopen
 
 import numpy as np
 import yt_dlp
+from yt_dlp.extractor.xiaohongshu import XiaoHongShuIE
+
+
+class RedNoteIE(XiaoHongShuIE):
+    """Compatibility adapter until yt-dlp recognizes Xiaohongshu's new domain."""
+
+    IE_NAME = "rednote"
+    _VALID_URL = r"https?://www\.rednote\.com/(?:explore|discovery/item)/(?P<id>[\da-f]+)"
 
 class ExtractionError(RuntimeError):
     pass
@@ -41,6 +49,8 @@ ALLOWED_SOCIAL_HOSTS = {
     "www.xiaohongshu.com",
     "xhslink.com",
     "www.xhslink.com",
+    "rednote.com",
+    "www.rednote.com",
 }
 
 MAX_AUDIO_SECONDS = 15 * 60
@@ -67,7 +77,7 @@ def _validate_social_url(url: str) -> tuple[str, str]:
         platform = "instagram"
     elif "youtube" in host or host == "youtu.be":
         platform = "youtube"
-    elif "xiaohongshu" in host or "xhslink" in host:
+    elif "xiaohongshu" in host or "xhslink" in host or "rednote" in host:
         platform = "xiaohongshu"
     else:
         platform = "x"
@@ -170,7 +180,11 @@ def _yt_dlp_media(url: str, youtube_client: str | None = None) -> tuple[str, dic
     if youtube_client:
         opts["extractor_args"] = {"youtube": {"player_client": [youtube_client]}}
     with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+        if (urlparse(url).hostname or "").lower().rstrip(".") in {"rednote.com", "www.rednote.com"}:
+            ydl.add_info_extractor(RedNoteIE())
+            info = ydl.extract_info(url, download=False, ie_key=RedNoteIE.ie_key())
+        else:
+            info = ydl.extract_info(url, download=False)
     if not isinstance(info, dict):
         raise ExtractionError("The URL did not resolve to a video.")
     return _pick_media_url(info)

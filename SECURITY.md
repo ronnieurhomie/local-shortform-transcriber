@@ -5,7 +5,7 @@ This is a small local-only tool, not a public web service.
 ## Deliberate protections
 - Server binds only to `127.0.0.1`; it is not exposed to your LAN or internet.
 - Trusted Host middleware accepts only `localhost` and `127.0.0.1`.
-- URL input is restricted to HTTPS URLs on TikTok, Instagram, YouTube, X, and Xiaohongshu domains.
+- URL input is restricted to HTTPS URLs on TikTok, Instagram, YouTube, X, and official Xiaohongshu / RedNote domains.
 - No shell execution with user-provided text.
 - No browser cookies, login credentials, API keys, or browser profiles are read.
 - URL transcription does not intentionally save the source video.

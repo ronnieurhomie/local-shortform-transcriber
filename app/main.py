@@ -38,7 +38,10 @@ class URLRequest(BaseModel):
 
 @app.get("/")
 def index():
-    return FileResponse(APP_DIR / "static" / "index.html")
+    return FileResponse(
+        APP_DIR / "static" / "index.html",
+        headers={"Cache-Control": "no-store"},
+    )
 
 @app.get("/api/health")
 def health():

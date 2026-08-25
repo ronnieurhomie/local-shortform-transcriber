@@ -33,6 +33,10 @@ class URLValidationTests(unittest.TestCase):
             _validate_social_url("https://xhslink.com/a/example")[1],
             "xiaohongshu",
         )
+        self.assertEqual(
+            _validate_social_url("https://www.rednote.com/discovery/item/abc123")[1],
+            "xiaohongshu",
+        )
 
     def test_rejects_non_https(self):
         with self.assertRaisesRegex(ExtractionError, "Only HTTPS"):
@@ -43,6 +47,7 @@ class URLValidationTests(unittest.TestCase):
             "https://example.com/video",
             "https://tiktok.com.evil.example/video",
             "https://xiaohongshu.com.evil.example/explore/abc123",
+            "https://rednote.com.evil.example/discovery/item/abc123",
         ):
             with self.subTest(url=url), self.assertRaisesRegex(
                 ExtractionError, "only public TikTok, Instagram, YouTube, X, or Xiaohongshu"

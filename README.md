@@ -26,7 +26,7 @@ transcribed.
 | Instagram | yt-dlp | End-to-end tested on a public Reel |
 | YouTube | yt-dlp with a cookie-free compatibility fallback | Public audio extraction tested |
 | X / Twitter | yt-dlp | End-to-end tested on a public video |
-| Xiaohongshu / RedNote | yt-dlp | Beta: canonical and `xhslink.com` URLs accepted; anti-bot/CAPTCHA may block extraction |
+| Xiaohongshu / RedNote | yt-dlp with a RedNote-domain compatibility adapter | Beta: `xiaohongshu.com`, `rednote.com`, and `xhslink.com` URLs accepted; anti-bot/CAPTCHA may block extraction |
 
 Platform websites change frequently, so a public URL that works today can later
 require a newer yt-dlp release. Private, age-restricted, login-only, or otherwise
