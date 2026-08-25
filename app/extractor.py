@@ -280,15 +280,16 @@ def audio_from_url(url: str, progress: Callable[[str], None] | None = None) -> n
         except Exception as e:
             errors.append(f"TikWM fallback: {_clean_error(e)[-220:]}")
 
+    if platform == "xiaohongshu":
+        raise ExtractionError(
+            "RedNote / Xiaohongshu did not provide public video data without a login. "
+            "This app intentionally does not read account cookies or browser sessions. "
+            "Save the public video yourself, then use the upload option below."
+        )
+
     detail = " | ".join(errors)
     if platform == "tiktok":
         method_summary = "Direct extraction and the TikTok fallback failed"
-    elif platform == "xiaohongshu":
-        method_summary = (
-            "Xiaohongshu extraction failed. Public links are supported on a best-effort basis, "
-            "but Xiaohongshu may require a CAPTCHA or login. Try the canonical www.xiaohongshu.com "
-            "link or upload the saved video"
-        )
     else:
         method_summary = "Direct extraction failed"
     raise ExtractionError(

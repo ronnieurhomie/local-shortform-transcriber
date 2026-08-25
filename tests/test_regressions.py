@@ -61,9 +61,14 @@ class URLValidationTests(unittest.TestCase):
     def test_xiaohongshu_block_has_useful_fallback_message(self):
         with (
             patch("app.extractor._yt_dlp_media", side_effect=RuntimeError("CAPTCHA")),
-            self.assertRaisesRegex(ExtractionError, "upload the saved video"),
+            self.assertRaises(ExtractionError) as raised,
         ):
-            audio_from_url("https://www.xiaohongshu.com/explore/abc123")
+            audio_from_url("https://www.rednote.com/discovery/item/abc123")
+
+        message = str(raised.exception)
+        self.assertIn("does not read account cookies", message)
+        self.assertIn("use the upload option", message)
+        self.assertNotIn("yt-dlp", message)
 
 
 class UploadCleanupTests(unittest.IsolatedAsyncioTestCase):
