@@ -41,6 +41,8 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
   exit 1
 fi
 
+VENV_PYTHON="$PWD/.venv/bin/python"
+
 if [ ! -d ".venv" ]; then
   echo "First-time setup will create an isolated .venv inside this folder."
   echo "It will install only the Python packages listed in requirements.txt."
@@ -52,17 +54,15 @@ if [ ! -d ".venv" ]; then
   esac
 
   "$TRANSCRIPT_PYTHON" -m venv .venv
-  source .venv/bin/activate
-  python -m pip install -r requirements.txt
+  "$VENV_PYTHON" -m pip install -r requirements.txt
   touch .setup-complete
 else
-  source .venv/bin/activate
   if [ ! -f ".setup-complete" ]; then
     echo "The local environment exists but setup is incomplete."
     echo "Delete the .venv folder and run START.command again."
     exit 1
   fi
-  if ! python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'; then
+  if [ ! -x "$VENV_PYTHON" ] || ! "$VENV_PYTHON" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'; then
     echo "This app's existing .venv uses an outdated Python version."
     echo "Move or delete only the .venv folder, then run START.command again."
     exit 1
@@ -76,4 +76,4 @@ echo "Press Control+C in Terminal to stop it."
 echo ""
 
 (sleep 2; open "http://127.0.0.1:8000") &
-exec python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
+exec "$VENV_PYTHON" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
