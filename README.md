@@ -57,6 +57,10 @@ CPU with int8 computation and beam size 5.
 3. Approve creation of the isolated `.venv` on first run.
 4. Keep the Terminal window open and use `http://127.0.0.1:8000`.
 
+For convenient repeat use on macOS, create a Finder alias (right-click
+`START.command` → **Make Alias**) and place that alias on your Desktop or Dock.
+The alias is only a local shortcut; it is not part of the repository.
+
 Do not open `app/static/index.html` directly; the interface requires the local
 Python server.
 
