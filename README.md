@@ -9,7 +9,8 @@ cookies, or API keys.
 
 1. Paste a public HTTPS TikTok, Instagram, YouTube, X, or Xiaohongshu URL.
 2. Click **Get transcript**.
-3. Follow real extraction, conversion, and transcription progress.
+3. Follow extraction, model preparation, and transcription progress, with text
+   appearing as each segment finishes. This works for URLs and uploads.
 4. Receive the verbatim transcript with duration, word count, and WPM.
 5. Optionally copy the timestamped transcript with a compact Pareto-analysis
    prompt for ChatGPT.
@@ -45,6 +46,11 @@ when a public URL is blocked.
 The default accuracy-first configuration uses the faster-whisper `small` model on
 CPU with int8 computation and beam size 5.
 
+Apple Silicon Macs can optionally use the same multilingual `small` model with
+GPU acceleration. The standard engine remains the default because the engines
+can produce different wording. See [performance notes](docs/PERFORMANCE.md) for
+the measured speed, accuracy limits, and optional setup.
+
 ## Run locally
 
 1. Install current Python and FFmpeg yourself. With Homebrew:
@@ -72,8 +78,9 @@ After setup:
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-The regression suite covers URL restrictions, credential rejection, oversized
-upload cleanup, and full-media duration/WPM metrics.
+The regression suite covers URL restrictions, credential rejection, upload
+cleanup, streaming results and failures, full-media duration/WPM metrics, and
+Mac acceleration's speech filtering and timestamp restoration.
 
 ## Privacy and security
 

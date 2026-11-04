@@ -25,6 +25,7 @@ button:disabled{cursor:not-allowed;opacity:.55}
 .row{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
 .stats{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
 .pill{border:1px solid #3f3f46;border-radius:999px;padding:6px 10px;color:#d4d4d8;font-size:13px}
+.pill:empty{display:none}
 textarea{width:100%;min-height:340px;background:#09090b;color:white;border:1px solid #3f3f46;border-radius:12px;padding:16px;font:16px/1.6 ui-monospace,monospace}
 details{color:#d4d4d8}
 .tiny{font-size:13px;color:#71717a;margin-top:10px}
@@ -38,7 +39,7 @@ details{color:#d4d4d8}
 <div class="card">
 <input id="url" type="url" placeholder="Paste a public TikTok, Instagram, YouTube, X, or Xiaohongshu / RedNote URL">
 <button id="go" class="primary">Get transcript</button>
-<div id="status" class="status"></div>
+<div id="status" class="status" role="status" aria-live="polite"></div>
 </div>
 
 <details class="card">
@@ -52,7 +53,7 @@ details{color:#d4d4d8}
 
 <div id="result" class="card result">
 <div class="row">
-  <strong>Transcript</strong>
+  <strong id="resultLabel">Transcript</strong>
   <div class="row">
     <button id="copy" class="secondary">Copy transcript</button>
     <button id="copyAnalysis" class="analysis">Copy for ChatGPT Analysis</button>
@@ -65,25 +66,34 @@ details{color:#d4d4d8}
 <span id="wpm" class="pill"></span>
 <span id="timings" class="pill"></span>
 </div>
-<textarea id="text"></textarea>
+<textarea id="text" aria-label="Transcript"></textarea>
 </div>
 </div>
 
 <script>
 const $=id=>document.getElementById(id), s=$('status');
 let latestResult=null;
-let workTimer=null, workStarted=0, currentPhase='Preparing';
+let workTimer=null, workStarted=0, currentPhase='Preparing', audioDuration=0, transcribedUntil=0;
 function status(t,e=false,working=false){s.textContent=t;s.className='status'+(e?' error':'')+(working?' working':'')}
 function elapsed(){return Math.max(0,Math.floor((Date.now()-workStarted)/1000))}
 function workingMessage(){
   const seconds=elapsed();
   const reminder=seconds>=35?' — still working locally':'';
-  status(`${currentPhase}… ${seconds}s${reminder}`,false,true);
+  const coverage=transcribedUntil>0?` · ${formatTime(transcribedUntil)} / ${formatTime(audioDuration)}`:'';
+  status(`${currentPhase}… ${seconds}s${coverage}${reminder}`,false,true);
 }
 function beginWork(){
   clearInterval(workTimer);
   workStarted=Date.now();
   currentPhase='Starting';
+  audioDuration=0;
+  transcribedUntil=0;
+  latestResult=null;
+  $('result').style.display='none';
+  $('text').value='';
+  $('text').readOnly=true;
+  $('copy').disabled=true;
+  $('copyAnalysis').disabled=true;
   $('go').disabled=true;
   $('upload').disabled=true;
   workingMessage();
@@ -95,12 +105,33 @@ function endWork(message,isError=false){
   workTimer=null;
   $('go').disabled=false;
   $('upload').disabled=false;
+  if(isError&&$('text').value){
+    $('resultLabel').textContent='Partial transcript — incomplete';
+    $('timings').textContent='Processing stopped before completion';
+    $('copy').disabled=false;
+  }
   status(message,isError);
+}
+function showSegment(segment){
+  $('result').style.display='block';
+  $('resultLabel').textContent='Transcript — in progress';
+  $('text').value+=($('text').value?' ':'')+segment.text;
+  transcribedUntil=segment.end;
+  $('lang').textContent='Language: detecting';
+  $('duration').textContent=formatTime(audioDuration);
+  $('words').textContent=$('text').value.trim().split(/\s+/).length+' words so far';
+  $('wpm').textContent='';
+  $('timings').textContent='Transcribing…';
+  workingMessage();
 }
 function show(d){
   latestResult=d;
   $('result').style.display='block';
   $('text').value=d.text||'';
+  $('text').readOnly=false;
+  $('resultLabel').textContent='Transcript';
+  $('copy').disabled=false;
+  $('copyAnalysis').disabled=false;
   $('lang').textContent='Language: '+(d.language||'auto');
   $('duration').textContent=(d.duration_seconds||0)+'s';
   $('words').textContent=(d.word_count||0)+' words';
@@ -114,21 +145,27 @@ async function streamTranscript(r){
   if(!r.ok)throw Error(await errorText(r));
   const reader=r.body.getReader(), decoder=new TextDecoder();
   let buffer='';
-  while(true){
-    const {value,done}=await reader.read();
-    buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});
-    const lines=buffer.split('\n');
-    buffer=lines.pop();
-    for(const line of lines){
-      if(!line.trim())continue;
-      const event=JSON.parse(line);
-      if(event.type==='phase')setPhase(event.name);
-      if(event.type==='error')throw Error(event.message);
-      if(event.type==='result')return event.data;
+  try{
+    while(true){
+      const {value,done}=await reader.read();
+      buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});
+      const lines=buffer.split('\n');
+      buffer=lines.pop();
+      for(const line of lines){
+        if(!line.trim())continue;
+        const event=JSON.parse(line);
+        if(event.type==='phase')setPhase(event.name);
+        if(event.type==='audio')audioDuration=event.duration_seconds;
+        if(event.type==='segment')showSegment(event.data);
+        if(event.type==='error')throw Error(event.message);
+        if(event.type==='result')return event.data;
+      }
+      if(done)break;
     }
-    if(done)break;
+    throw Error('The transcription stream ended before returning a result.');
+  }finally{
+    reader.releaseLock();
   }
-  throw Error('The transcription stream ended before returning a result.');
 }
 $('go').onclick=async()=>{
   let u=$('url').value.trim();
@@ -149,9 +186,8 @@ $('upload').onclick=async()=>{
   beginWork();
   let fd=new FormData(); fd.append('file',f);
   try{
-    let r=await fetch('/api/transcribe-upload',{method:'POST',body:fd});
-    if(!r.ok)throw Error(await errorText(r));
-    show(await r.json());
+    let r=await fetch('/api/transcribe-upload-stream',{method:'POST',body:fd});
+    show(await streamTranscript(r));
   }catch(e){endWork(e.message,true)}
 };
 $('copy').onclick=async()=>{

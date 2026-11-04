@@ -1,0 +1,2 @@
+-r requirements.txt
+pywhispercpp==1.5.1; sys_platform == "darwin" and platform_machine == "arm64"

@@ -20,7 +20,7 @@ MAX_UPLOAD_BYTES = 250 * 1024 * 1024  # 250 MB
 
 app = FastAPI(
     title="Local Shortform Transcriber",
-    version="0.4.0",
+    version="0.5.0",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
@@ -49,70 +49,102 @@ def health():
 
 @app.post("/api/transcribe-url")
 async def transcribe_url(req: URLRequest):
+    def run():
+        audio = audio_from_url(req.url)
+        return _transcribe_audio(audio, req.language)
+
     try:
-        audio = await asyncio.to_thread(audio_from_url, req.url)
-        return await asyncio.to_thread(get_transcriber().transcribe, audio, req.language)
+        return await asyncio.shield(asyncio.create_task(asyncio.to_thread(run)))
     except ExtractionError as e:
         raise HTTPException(422, str(e))
     except Exception as e:
         raise HTTPException(500, f"Transcription failed: {e}")
 
-@app.post("/api/transcribe-url-stream")
-async def transcribe_url_stream(req: URLRequest):
-    """Stream truthful processing phases, followed by the normal transcript result."""
+def _transcribe_audio(audio, language, progress=None, on_segment=None):
+    if progress:
+        progress("Preparing transcription model")
+    transcriber = get_transcriber()
+    if progress:
+        progress("Transcribing locally")
+    return transcriber.transcribe(audio, language, on_segment=on_segment)
+
+
+def _stream_transcription(load_audio, language, cleanup=None):
+    """Run extraction and inference off the event loop; stream completed segments."""
     queue: asyncio.Queue = asyncio.Queue()
     loop = asyncio.get_running_loop()
 
+    def publish(event):
+        event["at"] = time.monotonic()
+        loop.call_soon_threadsafe(queue.put_nowait, event)
+
+    def publish_phase(name):
+        publish({"type": "phase", "name": name})
+
+    def run():
+        try:
+            audio = load_audio(publish_phase)
+            publish({"type": "audio", "duration_seconds": round(len(audio) / 16000, 1)})
+            result = _transcribe_audio(
+                audio,
+                language,
+                progress=publish_phase,
+                on_segment=lambda row: publish({"type": "segment", "data": row}),
+            )
+            publish({"type": "result", "data": result})
+        except ExtractionError as e:
+            publish({"type": "error", "message": str(e)})
+        except Exception as e:
+            publish({"type": "error", "message": f"Transcription failed: {e}"})
+        finally:
+            if cleanup:
+                cleanup()
+
+    # Start the independent worker before returning the response. Its finally
+    # owns uploaded-file cleanup even if the response is disconnected/cancelled.
+    task = asyncio.create_task(asyncio.to_thread(run))
+
     async def events():
         phase_name = None
-        phase_started = time.monotonic()
+        phase_started = None
         timings = {}
-
-        def publish_phase(name: str):
-            loop.call_soon_threadsafe(queue.put_nowait, {"type": "phase", "name": name})
-
-        def run():
-            try:
-                audio = audio_from_url(req.url, progress=publish_phase)
-                publish_phase("Transcribing locally")
-                result = get_transcriber().transcribe(audio, req.language)
-                loop.call_soon_threadsafe(queue.put_nowait, {"type": "result", "data": result})
-            except ExtractionError as e:
-                loop.call_soon_threadsafe(queue.put_nowait, {"type": "error", "message": str(e)})
-            except Exception as e:
-                loop.call_soon_threadsafe(queue.put_nowait, {"type": "error", "message": f"Transcription failed: {e}"})
-
-        task = asyncio.create_task(asyncio.to_thread(run))
         try:
             while True:
                 event = await queue.get()
-                now = time.monotonic()
+                now = event["at"]
+                if event["type"] in {"phase", "result", "error"} and phase_name is not None:
+                    timings[phase_name] = timings.get(phase_name, 0) + now - phase_started
                 if event["type"] == "phase":
-                    if phase_name is not None:
-                        timings[phase_name] = round(now - phase_started, 1)
                     phase_name = event["name"]
                     phase_started = now
-                elif phase_name is not None:
-                    timings[phase_name] = round(now - phase_started, 1)
 
                 if event["type"] == "result":
-                    event["data"]["processing_times"] = timings
+                    event["data"]["processing_times"] = {
+                        name: round(value, 1) for name, value in timings.items()
+                    }
                 yield json.dumps(event) + "\n"
                 if event["type"] in {"result", "error"}:
                     break
         finally:
-            await task
+            await asyncio.shield(task)
 
-    return StreamingResponse(events(), media_type="application/x-ndjson")
+    return StreamingResponse(
+        events(), media_type="application/x-ndjson", headers={"Cache-Control": "no-store"}
+    )
 
-@app.post("/api/transcribe-upload")
-async def transcribe_upload(
-    file: UploadFile = File(...),
-    language: Optional[str] = Form(None),
-):
+
+@app.post("/api/transcribe-url-stream")
+async def transcribe_url_stream(req: URLRequest):
+    return _stream_transcription(
+        lambda progress: audio_from_url(req.url, progress=progress), req.language
+    )
+
+
+async def _save_upload(file):
     suffix = Path(file.filename or "upload.mp4").suffix.lower() or ".mp4"
     allowed = {".mp4", ".mov", ".m4v", ".webm", ".mp3", ".m4a", ".wav", ".aac", ".ogg"}
     if suffix not in allowed:
+        await file.close()
         raise HTTPException(400, "Unsupported file type.")
 
     total = 0
@@ -125,11 +157,45 @@ async def transcribe_upload(
                 if total > MAX_UPLOAD_BYTES:
                     raise HTTPException(413, "File is larger than the 250 MB local safety limit.")
                 tmp.write(chunk)
-        audio = await asyncio.to_thread(audio_from_file, path)
-        return await asyncio.to_thread(get_transcriber().transcribe, audio, language)
-    except ExtractionError as e:
-        raise HTTPException(422, str(e))
-    finally:
-        await file.close()
+        return path
+    except BaseException:
         if path is not None:
             path.unlink(missing_ok=True)
+        raise
+    finally:
+        await file.close()
+
+
+@app.post("/api/transcribe-upload")
+async def transcribe_upload(
+    file: UploadFile = File(...),
+    language: Optional[str] = Form(None),
+):
+    path = await _save_upload(file)
+
+    def run():
+        try:
+            return _transcribe_audio(audio_from_file(path), language)
+        finally:
+            path.unlink(missing_ok=True)
+
+    try:
+        return await asyncio.shield(asyncio.create_task(asyncio.to_thread(run)))
+    except ExtractionError as e:
+        raise HTTPException(422, str(e))
+
+
+@app.post("/api/transcribe-upload-stream")
+async def transcribe_upload_stream(
+    file: UploadFile = File(...),
+    language: Optional[str] = Form(None),
+):
+    path = await _save_upload(file)
+
+    def load_audio(progress):
+        progress("Converting the audio")
+        return audio_from_file(path)
+
+    return _stream_transcription(
+        load_audio, language, cleanup=lambda: path.unlink(missing_ok=True)
+    )

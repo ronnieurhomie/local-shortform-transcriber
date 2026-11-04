@@ -1,9 +1,25 @@
 from __future__ import annotations
 import os
 import threading
+from collections.abc import Callable
 
 import numpy as np
 from faster_whisper import WhisperModel
+
+
+def transcript_result(audio: np.ndarray, rows: list[dict], language: str | None) -> dict:
+    text = " ".join(row["text"] for row in rows).strip()
+    words = len(text.split())
+    media_duration = len(audio) / 16000
+    return {
+        "text": text,
+        "segments": rows,
+        "language": language,
+        "duration_seconds": round(media_duration, 1),
+        "word_count": words,
+        "words_per_minute": round(words / (media_duration / 60), 1) if media_duration else 0,
+    }
+
 
 class LocalTranscriber:
     def __init__(self):
@@ -17,7 +33,12 @@ class LocalTranscriber:
             compute_type=compute_type,
         )
 
-    def transcribe(self, audio: np.ndarray, language: str | None = None) -> dict:
+    def transcribe(
+        self,
+        audio: np.ndarray,
+        language: str | None = None,
+        on_segment: Callable[[dict], None] | None = None,
+    ) -> dict:
         segments, info = self.model.transcribe(
             audio,
             language=language or None,
@@ -27,31 +48,20 @@ class LocalTranscriber:
         )
 
         rows = []
-        parts = []
         for seg in segments:
             text = seg.text.strip()
             if not text:
                 continue
-            rows.append({
+            row = {
                 "start": round(seg.start, 2),
                 "end": round(seg.end, 2),
                 "text": text,
-            })
-            parts.append(text)
+            }
+            rows.append(row)
+            if on_segment is not None:
+                on_segment(row)
 
-        text = " ".join(parts).strip()
-        words = len(text.split())
-        media_duration = len(audio) / 16000
-        wpm = round(words / (media_duration / 60), 1) if media_duration else 0
-
-        return {
-            "text": text,
-            "segments": rows,
-            "language": getattr(info, "language", None),
-            "duration_seconds": round(media_duration, 1),
-            "word_count": words,
-            "words_per_minute": wpm,
-        }
+        return transcript_result(audio, rows, getattr(info, "language", None))
 
 _instance = None
 _lock = threading.Lock()
@@ -61,5 +71,12 @@ def get_transcriber():
     if _instance is None:
         with _lock:
             if _instance is None:
-                _instance = LocalTranscriber()
+                engine = os.getenv("WHISPER_ENGINE", "faster-whisper")
+                if engine == "metal":
+                    from .metal_transcriber import MetalTranscriber
+                    _instance = MetalTranscriber()
+                elif engine == "faster-whisper":
+                    _instance = LocalTranscriber()
+                else:
+                    raise ValueError("WHISPER_ENGINE must be faster-whisper or metal.")
     return _instance
