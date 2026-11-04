@@ -20,7 +20,7 @@ MAX_UPLOAD_BYTES = 250 * 1024 * 1024  # 250 MB
 
 app = FastAPI(
     title="Local Shortform Transcriber",
-    version="0.6.2",
+    version="0.6.3",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,

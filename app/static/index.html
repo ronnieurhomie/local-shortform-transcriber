@@ -257,6 +257,7 @@ async function streamTranscript(r){
     reader.releaseLock();
   }
 }
+$('url').oninput=()=>{if(!workTimer)status('')};
 $('go').onclick=async()=>{
   let u=$('url').value.trim();
   if(!u)return status('Paste a URL first.',true);
