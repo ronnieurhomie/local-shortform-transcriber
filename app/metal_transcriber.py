@@ -1,4 +1,4 @@
-"""Optional Apple Silicon acceleration using the same multilingual small model."""
+"""English-optimized Apple Silicon acceleration with the multilingual small model."""
 
 import os
 import platform
@@ -20,15 +20,15 @@ class MetalTranscriber:
         try:
             from pywhispercpp.model import Model
         except ImportError as error:
-            raise RuntimeError("Install requirements-metal.txt to use Mac acceleration.") from error
+            raise RuntimeError("Install the current requirements.txt to use Mac acceleration.") from error
 
         model_path = hf_hub_download(
             repo_id="ggerganov/whisper.cpp", filename="ggml-small.bin", token=False,
         )
         self.model = Model(
             model_path,
-            params_sampling_strategy=1,
-            beam_search={"beam_size": 5, "patience": 1.0},
+            params_sampling_strategy=0,
+            greedy={"best_of": 1},
             n_threads=4,
             context_params={"use_gpu": True, "flash_attn": True},
             print_progress=False,

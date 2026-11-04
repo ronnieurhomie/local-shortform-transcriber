@@ -20,7 +20,7 @@ MAX_UPLOAD_BYTES = 250 * 1024 * 1024  # 250 MB
 
 app = FastAPI(
     title="Local Shortform Transcriber",
-    version="0.5.0",
+    version="0.6.0",
     docs_url=None,
     redoc_url=None,
     openapi_url=None,
@@ -34,7 +34,7 @@ app.add_middleware(
 
 class URLRequest(BaseModel):
     url: str
-    language: Optional[str] = None
+    language: Optional[str] = "en"
 
 @app.get("/")
 def index():
@@ -63,7 +63,7 @@ async def transcribe_url(req: URLRequest):
 def _transcribe_audio(audio, language, progress=None, on_segment=None):
     if progress:
         progress("Preparing transcription model")
-    transcriber = get_transcriber()
+    transcriber = get_transcriber(language)
     if progress:
         progress("Transcribing locally")
     return transcriber.transcribe(audio, language, on_segment=on_segment)
@@ -169,7 +169,7 @@ async def _save_upload(file):
 @app.post("/api/transcribe-upload")
 async def transcribe_upload(
     file: UploadFile = File(...),
-    language: Optional[str] = Form(None),
+    language: Optional[str] = Form("en"),
 ):
     path = await _save_upload(file)
 
@@ -188,7 +188,7 @@ async def transcribe_upload(
 @app.post("/api/transcribe-upload-stream")
 async def transcribe_upload_stream(
     file: UploadFile = File(...),
-    language: Optional[str] = Form(None),
+    language: Optional[str] = Form("en"),
 ):
     path = await _save_upload(file)
 

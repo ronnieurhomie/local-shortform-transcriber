@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 import numpy as np
 from fastapi import HTTPException, UploadFile
+from httpx import ASGITransport, AsyncClient
 
 from app import main
 
@@ -189,10 +190,12 @@ class StreamingTests(unittest.IsolatedAsyncioTestCase):
     async def test_json_endpoints_keep_result_schema_and_load_model_on_worker(self):
         loop_thread = threading.get_ident()
         model_threads = []
+        model_languages = []
         paths = []
 
-        def get_model():
+        def get_model(language):
             model_threads.append(threading.get_ident())
+            model_languages.append(language)
             return self.model
 
         def load_file(path):
@@ -212,7 +215,32 @@ class StreamingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(upload_result, result())
         self.assertEqual(len(model_threads), 2)
         self.assertTrue(all(thread != loop_thread for thread in model_threads))
+        self.assertEqual(model_languages, ["en", None])
         self.assertFalse(paths[0].exists())
+
+    async def test_api_url_and_upload_defaults_reach_engine_as_english(self):
+        languages = []
+
+        def get_model(language):
+            languages.append(language)
+            return self.model
+
+        with (
+            patch.object(main, "audio_from_url", return_value=self.audio),
+            patch.object(main, "audio_from_file", return_value=self.audio),
+            patch.object(main, "get_transcriber", side_effect=get_model),
+        ):
+            async with AsyncClient(transport=ASGITransport(app=main.app), base_url="http://127.0.0.1") as client:
+                url_response = await client.post("/api/transcribe-url", json={"url": "https://youtu.be/example"})
+                upload_response = await client.post(
+                    "/api/transcribe-upload-stream", files={"file": ("clip.wav", b"media", "audio/wav")},
+                )
+
+        self.assertEqual(url_response.status_code, 200)
+        self.assertEqual(url_response.json(), result())
+        self.assertEqual(upload_response.status_code, 200)
+        self.assertEqual(json.loads(upload_response.text.splitlines()[-1])["type"], "result")
+        self.assertEqual(languages, ["en", "en"])
 
     async def test_timings_use_worker_clock_and_accumulate_repeated_phases(self):
         ticks = itertools.count(10)

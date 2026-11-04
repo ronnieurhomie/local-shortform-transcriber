@@ -1,6 +1,9 @@
 from __future__ import annotations
 import os
 import threading
+import platform
+import importlib.util
+import logging
 from collections.abc import Callable
 
 import numpy as np
@@ -63,20 +66,38 @@ class LocalTranscriber:
 
         return transcript_result(audio, rows, getattr(info, "language", None))
 
-_instance = None
+_instances = {}
 _lock = threading.Lock()
 
-def get_transcriber():
-    global _instance
-    if _instance is None:
-        with _lock:
-            if _instance is None:
-                engine = os.getenv("WHISPER_ENGINE", "faster-whisper")
-                if engine == "metal":
-                    from .metal_transcriber import MetalTranscriber
-                    _instance = MetalTranscriber()
-                elif engine == "faster-whisper":
-                    _instance = LocalTranscriber()
-                else:
-                    raise ValueError("WHISPER_ENGINE must be faster-whisper or metal.")
-    return _instance
+def get_transcriber(language=None):
+    requested = os.getenv("WHISPER_ENGINE", "auto")
+    if requested not in {"auto", "faster-whisper", "metal"}:
+        raise ValueError("WHISPER_ENGINE must be auto, faster-whisper, or metal.")
+    automatic_metal = (
+        requested == "auto"
+        and language == "en"
+        and platform.system() == "Darwin"
+        and platform.machine() == "arm64"
+        and os.getenv("WHISPER_MODEL", "small") == "small"
+        and os.getenv("WHISPER_DEVICE", "cpu") == "cpu"
+        and importlib.util.find_spec("pywhispercpp") is not None
+    )
+    engine = "metal" if requested == "metal" or automatic_metal else "faster-whisper"
+    with _lock:
+        if engine not in _instances:
+            if engine == "metal":
+                from .metal_transcriber import MetalTranscriber
+                try:
+                    _instances[engine] = MetalTranscriber()
+                except Exception:
+                    if requested != "auto":
+                        raise
+                    logging.getLogger(__name__).warning(
+                        "Mac acceleration could not initialize; using the standard engine."
+                    )
+                    if "faster-whisper" not in _instances:
+                        _instances["faster-whisper"] = LocalTranscriber()
+                    _instances[engine] = _instances["faster-whisper"]
+            else:
+                _instances[engine] = LocalTranscriber()
+        return _instances[engine]

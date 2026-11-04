@@ -43,27 +43,110 @@ class TranscriberCallbackTests(unittest.TestCase):
 
 
 class EngineSelectionTests(unittest.TestCase):
-    def test_standard_engine_remains_default_and_is_reused(self):
-        model = object()
-        with (
-            patch.dict(os.environ, {}, clear=True),
-            patch.object(engines, "_instance", None),
-            patch.object(engines, "LocalTranscriber", return_value=model) as load,
-        ):
-            self.assertIs(engines.get_transcriber(), model)
-            self.assertIs(engines.get_transcriber(), model)
-        load.assert_called_once_with()
+    def start_patch(self, patcher):
+        value = patcher.start()
+        self.addCleanup(patcher.stop)
+        return value
 
-    def test_metal_engine_requires_explicit_selection(self):
-        model = object()
+    def setUp(self):
+        self.start_patch(patch.dict(os.environ, {}, clear=True))
+        self.start_patch(patch.object(engines, "_instances", {}))
+
+    def apple_silicon(self):
+        self.start_patch(patch.object(engines.platform, "system", return_value="Darwin"))
+        self.start_patch(patch.object(engines.platform, "machine", return_value="arm64"))
+        return self.start_patch(patch.object(engines.importlib.util, "find_spec", return_value=object()))
+
+    def test_english_uses_mac_gpu_and_reuses_each_engine_across_requests(self):
+        self.apple_silicon()
+        accelerated, standard = object(), object()
+        with (
+            patch("app.metal_transcriber.MetalTranscriber", return_value=accelerated) as metal_load,
+            patch.object(engines, "LocalTranscriber", return_value=standard) as cpu_load,
+        ):
+            self.assertIs(engines.get_transcriber("en"), accelerated)
+            self.assertIs(engines.get_transcriber("en"), accelerated)
+            self.assertIs(engines.get_transcriber("zh"), standard)
+            self.assertIs(engines.get_transcriber(None), standard)
+        metal_load.assert_called_once_with()
+        cpu_load.assert_called_once_with()
+
+    def test_other_hardware_and_languages_use_standard_engine(self):
+        for system, machine, language in (
+            ("Darwin", "x86_64", "en"),
+            ("Linux", "x86_64", "en"),
+            ("Windows", "AMD64", "en"),
+            ("Darwin", "arm64", "zh"),
+            ("Darwin", "arm64", None),
+        ):
+            with (
+                self.subTest(system=system, machine=machine, language=language),
+                patch.object(engines, "_instances", {}),
+                patch.object(engines.platform, "system", return_value=system),
+                patch.object(engines.platform, "machine", return_value=machine),
+                patch.object(engines.importlib.util, "find_spec", return_value=object()),
+                patch.object(engines, "LocalTranscriber", return_value=object()) as cpu_load,
+                patch("app.metal_transcriber.MetalTranscriber") as metal_load,
+            ):
+                self.assertIs(engines.get_transcriber(language), cpu_load.return_value)
+                metal_load.assert_not_called()
+                cpu_load.assert_called_once_with()
+
+    def test_missing_native_binding_keeps_existing_install_usable(self):
+        binding = self.apple_silicon()
+        binding.return_value = None
+        with (
+            patch.object(engines, "LocalTranscriber", return_value=object()) as cpu_load,
+            patch("app.metal_transcriber.MetalTranscriber") as metal_load,
+        ):
+            self.assertIs(engines.get_transcriber("en"), cpu_load.return_value)
+        cpu_load.assert_called_once_with()
+        metal_load.assert_not_called()
+
+    def test_gpu_initialization_failure_reuses_standard_engine_and_does_not_retry(self):
+        self.apple_silicon()
+        with (
+            patch.object(engines, "LocalTranscriber", return_value=object()) as cpu_load,
+            patch("app.metal_transcriber.MetalTranscriber", side_effect=RuntimeError("No GPU")) as metal_load,
+        ):
+            existing = engines.get_transcriber(None)
+            with self.assertLogs(engines.__name__, level="WARNING") as logs:
+                self.assertIs(engines.get_transcriber("en"), existing)
+            self.assertIs(engines.get_transcriber("en"), existing)
+            self.assertIs(engines.get_transcriber(None), existing)
+        self.assertIn("using the standard engine", logs.output[0])
+        cpu_load.assert_called_once_with()
+        metal_load.assert_called_once_with()
+
+    def test_gpu_failure_on_first_request_constructs_a_reusable_standard_fallback(self):
+        self.apple_silicon()
+        with (
+            patch.object(engines, "LocalTranscriber", return_value=object()) as cpu_load,
+            patch("app.metal_transcriber.MetalTranscriber", side_effect=RuntimeError("Download unavailable")),
+            self.assertLogs(engines.__name__, level="WARNING"),
+        ):
+            self.assertIs(engines.get_transcriber("en"), cpu_load.return_value)
+            self.assertIs(engines.get_transcriber(None), cpu_load.return_value)
+        cpu_load.assert_called_once_with()
+
+    def test_explicit_standard_override_is_respected_on_compatible_mac(self):
+        self.apple_silicon()
+        with (
+            patch.dict(os.environ, {"WHISPER_ENGINE": "faster-whisper"}),
+            patch.object(engines, "LocalTranscriber", return_value=object()) as cpu_load,
+            patch("app.metal_transcriber.MetalTranscriber") as metal_load,
+        ):
+            self.assertIs(engines.get_transcriber("en"), cpu_load.return_value)
+        metal_load.assert_not_called()
+
+    def test_explicit_metal_override_does_not_silently_hide_initialization_failure(self):
         with (
             patch.dict(os.environ, {"WHISPER_ENGINE": "metal"}),
-            patch.object(engines, "_instance", None),
-            patch("app.metal_transcriber.MetalTranscriber", return_value=model) as load,
+            patch("app.metal_transcriber.MetalTranscriber", side_effect=RuntimeError("Native engine unavailable")),
             patch.object(engines, "LocalTranscriber") as standard,
         ):
-            self.assertIs(engines.get_transcriber(), model)
-        load.assert_called_once_with()
+            with self.assertRaisesRegex(RuntimeError, "Native engine unavailable"):
+                engines.get_transcriber("en")
         standard.assert_not_called()
 
 

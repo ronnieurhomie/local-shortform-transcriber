@@ -1,82 +1,80 @@
-# Transcription performance
+# English speed and accuracy
 
-The standard engine remains faster-whisper with multilingual `small`, CPU int8,
-beam size 5, and Silero speech filtering. Models are reused while the app runs.
-Both URL and upload flows show completed transcript segments before the full
-result. This reduces waiting for readable text; it does not itself reduce total
-inference time. Source-clock timings separate extraction/conversion, model
-preparation, and inference, and include repeated fallback attempts.
+English transcription automatically uses Apple GPU acceleration on compatible
+Apple Silicon Macs. It keeps the multilingual `small` Whisper model and the
+existing Silero speech filter, with greedy decoding selected by the comparison
+below. Other devices, missing GPU dependencies, custom models/devices, and
+requests for other languages use faster-whisper (CPU int8 by default) and beam size 5.
+If automatic GPU initialization fails, the app falls back to the standard engine.
 
-## Optional Apple Silicon acceleration
+The web app defaults to English. API clients can supply another language code,
+or `null` for automatic detection, to retain the original multilingual engine.
+Model instances are reused while the server runs. Completed segments appear
+before the full result for both URLs and uploads.
 
-The optional Metal engine uses whisper.cpp through `pywhispercpp`. It uses the
-same multilingual `small` model size, beam size 5, and the standard engine's
-Silero speech filter. Timestamps are mapped back to the original audio, and
-duration/WPM use the whole input. Decoder state is cleared between separate jobs.
+## Setup
 
-After normal setup, install the optional binding once from the project folder:
+New installations use the normal `START.command` setup. The GPU binding is a
+prebuilt Python package installed only on Apple Silicon macOS; no separate
+Whisper app or native command-line tools are needed.
 
-```bash
-.venv/bin/python -m pip install -r requirements-metal.txt
-```
-
-Stop the running server, then launch with:
+For an existing installation, update dependencies once from the project folder:
 
 ```bash
-WHISPER_ENGINE=metal ./START.command
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
-Launching `START.command` normally uses the original engine. Metal currently
-supports Apple Silicon macOS and the default `small` model. Other models/devices
-continue to use the standard engine. There is no paid service or per-use fee.
+The first GPU job downloads about 466 MiB of model weights to the user's Hugging
+Face cache and prepares GPU shaders. Subsequent jobs reuse the loaded model.
+There are no account requirements, paid APIs, or per-transcription charges.
 
-The first Metal launch downloads an additional model-format file of about
-466 MiB to the user's Hugging Face cache. It also prepares GPU shaders, which
-can take extra time. The model is kept in memory for subsequent jobs. The
-optional binding ships as a prebuilt Python wheel; no separate native app or
-command-line Whisper installation is needed.
+To deliberately use the previous engine, stop the server and launch:
 
-## Measured results
+```bash
+WHISPER_ENGINE=faster-whisper ./START.command
+```
 
-Measured on an Apple M1 MacBook Air with 16 GB RAM, using faster-whisper 1.2.1 /
-CTranslate2 4.8.1 and pywhispercpp 1.5.1. CPU used four threads. Both engines used
-automatic language detection, multilingual `small`, beam size 5, and the same
-Silero speech selection. CPU uses int8 weights; Metal uses the FP16 GGML model.
-Each inference measurement is the mean of two runs
-with the model loaded; media retrieval and first-time setup are excluded.
+`WHISPER_ENGINE=metal` still explicitly selects the GPU engine. The legacy
+`requirements-metal.txt` entry point remains compatible with the main requirements.
 
-| Sample | CPU | Metal | Inference speedup |
-| --- | ---: | ---: | ---: |
-| English speech, 45 seconds | 13.54 s | 5.80 s | 2.33x |
-| Natural Mandarin, 4.28 seconds | 3.81 s | 1.69 s | 2.26x |
-| Synthetic Mandarin, 4 seconds | 4.58 s | 1.67 s | 2.73x |
+## Focused release comparison
 
-On the English clip, the first segment appeared at about 7.68 s on CPU versus
-3.73 s on Metal. Initial Metal model/shader preparation took about 20.6 s;
-loading after shader preparation took about 1.1 s. Eight CPU threads were
-slower than four on the tested machine, so the default was not increased.
+Tested on an Apple M1 MacBook Air with 16 GB RAM, faster-whisper 1.2.1 /
+CTranslate2 4.8.1, and pywhispercpp 1.5.1. Nine English recordings contained
+95.565 seconds of speech and 274 normalized reference words. The eight
+LibriSpeech clips have different speakers and were selected before inference;
+the ninth is the JFK sample containing negation. References include proper
+names and spoken numbers. Both engines use the same speech selection.
 
-These are small-sample results, not a guarantee for other videos or devices.
-English wording differed in one repeat. Both engines made the same mistake
-on the natural Mandarin fixture, and both misrecognized the opening of the
-synthetic fixture. The optional engine is faster on these clips, but this does
-not establish identical or universally better accuracy. It therefore remains
-opt-in. No production model was made smaller and beam search was not reduced.
+| Configuration | Total inference | Word errors |
+| --- | ---: | ---: |
+| Previous CPU, auto language, beam 5 | 40.167 s | 3 / 274 (1.09%) |
+| GPU, explicit English, beam 5 | 12.518 s | 4 / 274 (1.46%) |
+| GPU, English-only small.en model, beam 5 | 15.749 s | 4 / 274 (1.46%) |
+| **Selected: GPU, explicit English, greedy** | **11.069 s** | **3 / 274 (1.09%)** |
 
-Public fixtures and references:
+The selected setting was about 3.6 times faster than the previous CPU baseline
+and made the same three normalized word errors, involving names/spelling.
+The checked numbers and negation were retained; no phrases were omitted or
+inserted. The English-only model was not selected because it was slower and
+offered no accuracy improvement on this set.
 
-- [WeNet speech fixtures](https://github.com/wenet-e2e/wenet/tree/main/test/resources)
-- [WeNet reference transcripts](https://github.com/wenet-e2e/wenet/blob/main/test/resources/dataset/text)
-- [Hugging Face audio fixtures](https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples)
-- [whisper.cpp JFK sample](https://github.com/ggml-org/whisper.cpp/tree/master/samples)
+Inference times include speech filtering but exclude model loading, downloads,
+and social-media retrieval. CPU weights are int8; GPU weights are FP16. WER is
+Levenshtein substitutions + deletions + insertions divided by reference words.
+Normalization ignores case/punctuation, expands common contractions, and treats
+numerals below 100 as their spoken words. Each shortlisted configuration ran
+once on this fixed set. These clean recordings are a release comparison, not
+proof of accuracy on noisy conversations, all accents, or specialist terminology.
+Do not interpret 1.09% WER as a universal accuracy guarantee.
 
-The 45-second English fixture is a timing and baseline comparison; it was not
-scored against an independently verified reference. The short Mandarin clips
-do not establish performance or accuracy on long conversations.
+Sources: [LibriSpeech CC BY 4.0](https://www.openslr.org/12/),
+[dataset revision 71cacbfb7e2354c4226d01e70d77d5fca3d04ba1](https://huggingface.co/datasets/openslr/librispeech_asr/tree/71cacbfb7e2354c4226d01e70d77d5fca3d04ba1),
+and [whisper.cpp JFK sample](https://github.com/ggml-org/whisper.cpp/tree/master/samples).
+LibriSpeech row indices: 3, 101, 302, 601, 904, 1202, 1803, 2404 (clean/test).
 
-## Current limits
+## Unchanged limits
 
-This speed update does not raise the limits: processing is capped at the first
-15 minutes and uploads at 250 MiB. Longer recordings require separate duration,
-memory, timeout, and completeness handling before the cap can be raised safely.
-Audio conversion currently has a 180-second timeout, separate from inference.
+This release does not add history or change duration limits. Processing remains
+capped at the first 15 minutes, uploads at 250 MiB, and audio conversion at a
+180-second timeout. Longer recordings need a separate update.

@@ -1,8 +1,8 @@
 # Local Shortform Transcriber
 
 A lightweight, localhost-only Mac app for turning public short-form video URLs
-into verbatim transcripts. Transcription runs locally with FFmpeg and
-faster-whisper—no paid transcription API, accounts, database, analytics, browser
+into verbatim transcripts, optimized for English speech. Transcription runs
+locally with FFmpeg and Whisper—no paid transcription API, accounts, database, analytics, browser
 cookies, or API keys.
 
 ## What it does
@@ -43,13 +43,11 @@ when a public URL is blocked.
 - Internet access for public-media retrieval, dependency installation, and the
   first faster-whisper model download
 
-The default accuracy-first configuration uses the faster-whisper `small` model on
-CPU with int8 computation and beam size 5.
-
-Apple Silicon Macs can optionally use the same multilingual `small` model with
-GPU acceleration. The standard engine remains the default because the engines
-can produce different wording. See [performance notes](docs/PERFORMANCE.md) for
-the measured speed, accuracy limits, and optional setup.
+The app uses the multilingual `small` Whisper model and specifies English by
+default. Compatible Apple Silicon Macs automatically use GPU acceleration.
+Other devices, existing installations without the GPU binding, and requests
+for other languages use the standard CPU engine. See
+[performance notes](docs/PERFORMANCE.md) for the measured speed and accuracy.
 
 ## Run locally
 
