@@ -8,7 +8,7 @@ cookies, or API keys.
 ## What it does
 
 1. Paste a public HTTPS TikTok, Instagram, YouTube, X, or Xiaohongshu URL.
-2. Click **Get transcript**.
+2. Click **Transcribe**.
 3. Follow extraction, model preparation, and transcription progress, with text
    appearing as each segment finishes. This works for URLs and uploads.
 4. Receive the verbatim transcript with duration, word count, and WPM.

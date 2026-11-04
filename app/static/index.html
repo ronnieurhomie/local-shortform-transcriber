@@ -5,68 +5,114 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Local Shortform Transcriber</title>
 <style>
+:root{color-scheme:dark;--bg:#101113;--panel:#191b1e;--line:#303238;--text:#f2f2f3;--muted:#a7a9b0;--quiet:#898c95}
 *{box-sizing:border-box}
-body{margin:0;background:#0b0b0c;color:#f4f4f5;font-family:Inter,system-ui,-apple-system,sans-serif}
-.wrap{max-width:760px;margin:auto;padding:52px 20px}
-h1{font-size:44px;letter-spacing:-.04em;margin:0 0 8px}
-.sub{color:#a1a1aa;margin-bottom:28px;line-height:1.5}
-.card{background:#151517;border:1px solid #27272a;border-radius:18px;padding:18px;margin-bottom:16px}
-input[type=url]{width:100%;padding:15px;border-radius:12px;border:1px solid #3f3f46;background:#09090b;color:white;font-size:16px}
-button{border:0;border-radius:12px;padding:13px 17px;font-weight:700;cursor:pointer}
-button:disabled{cursor:not-allowed;opacity:.55}
-.primary{width:100%;margin-top:12px;background:#fafafa;color:#09090b}
-.secondary{background:#27272a;color:white}
-.analysis{background:#2563eb;color:white}
-.status{color:#a1a1aa;min-height:22px;margin-top:12px;line-height:1.5}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:820px;margin:auto;padding:80px 28px 64px}
+h1{font-size:clamp(30px,5vw,42px);font-weight:650;letter-spacing:-.055em;line-height:1.15;margin:0 0 36px}
+.source{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:10px}
+.input-row{display:flex;align-items:center;gap:12px}
+input[type=url]{min-width:0;flex:1;width:100%;padding:14px 12px;border:0;border-radius:8px;background:transparent;color:var(--text);font:inherit;font-size:16px}
+input::placeholder{color:var(--quiet)}
+button{border:1px solid transparent;border-radius:10px;min-height:44px;padding:11px 16px;font:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s,color .15s}
+button:disabled{cursor:not-allowed;opacity:.5}
+.primary{display:flex;justify-content:center;align-items:center;gap:14px;flex:none;background:#f0f0f1;color:#17181a}
+.primary:hover:not(:disabled){background:white}
+.primary svg{width:17px;height:17px}
+.secondary{background:#25272c;color:var(--text)}
+.secondary:hover:not(:disabled){background:#30333a}
+.analysis{background:transparent;color:var(--muted);border-color:var(--line)}
+.analysis:hover:not(:disabled){background:#202226;color:var(--text)}
+:focus-visible{outline:2px solid #a9bcf0;outline-offset:4px}
+.status{color:var(--muted);margin:12px 10px 5px;font-size:14px;line-height:1.55;overflow-wrap:anywhere}
+.status:empty{display:none}
 .working::before{content:"";display:inline-block;width:14px;height:14px;margin-right:9px;border:2px solid #52525b;border-top-color:#fafafa;border-radius:50%;vertical-align:-2px;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .error{color:#fca5a5}
-.result{display:none}
-.row{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
-.stats{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
-.pill{border:1px solid #3f3f46;border-radius:999px;padding:6px 10px;color:#d4d4d8;font-size:13px}
-.pill:empty{display:none}
-textarea{width:100%;min-height:340px;background:#09090b;color:white;border:1px solid #3f3f46;border-radius:12px;padding:16px;font:16px/1.6 ui-monospace,monospace}
-details{color:#d4d4d8}
-.tiny{font-size:13px;color:#71717a;margin-top:10px}
+.source-limit{color:var(--quiet);font-size:13px;margin:11px 2px 25px}
+.disclosure{color:var(--muted);font-size:14px;margin-top:16px}
+summary{cursor:pointer;width:fit-content;list-style:none;display:flex;align-items:center;gap:9px;min-height:30px}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"";width:6px;height:6px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(-45deg);flex:none;margin-right:3px}
+details[open]>summary::before{transform:rotate(45deg);margin-top:-3px}
+summary:hover{color:var(--text)}
+.disclosure-body{padding:12px 0 2px 18px;line-height:1.65;font-size:13px;color:var(--muted);max-width:650px}
+.disclosure-body p{margin:0 0 10px}
+.upload-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+input[type=file]{min-width:0;max-width:100%;flex:1;font:inherit;font-size:13px;color:var(--muted)}
+input[type=file]::file-selector-button{background:#25272c;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-right:12px;font:inherit;cursor:pointer}
+.upload-limit{color:var(--quiet);font-size:12px;margin:9px 0 0}
+.result{display:none;margin-top:40px;padding-top:28px;border-top:1px solid var(--line)}
+.row{display:flex;justify-content:space-between;gap:14px;align-items:center;flex-wrap:wrap}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+#resultLabel{font-size:18px;font-weight:600;letter-spacing:-.02em}
+.stats{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:16px 0;color:var(--muted);font-size:13px}
+.stats span:empty{display:none}
+.stats span+span::before{content:"·";margin-right:16px;color:#62656e}
+textarea{display:block;width:100%;min-height:360px;background:#151619;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:22px;font:16px/1.85 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;resize:vertical}
+.result-details{margin-top:14px;font-size:12px}
+.result-details .disclosure-body{font-size:12px;line-height:1.7}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:560px){.wrap{padding:44px 20px}h1{margin-bottom:28px}.input-row{flex-direction:column;gap:4px}.primary{width:100%}input[type=url]{flex:auto}.source{padding:9px}.row{align-items:flex-start}.actions{width:100%}.actions button{flex:1;padding-inline:12px}textarea{padding:17px;font-size:16px}.stats{gap:12px}.stats span+span::before{margin-right:12px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}.working::before{animation:none}}
 </style>
 </head>
 <body>
 <div class="wrap">
 <h1>Video → Transcript</h1>
-<div class="sub">Paste a public TikTok, Instagram, YouTube, X, or Xiaohongshu / RedNote link. Optimized for English speech. Transcription runs locally on your Mac. Xiaohongshu support is beta and may be blocked by CAPTCHA.</div>
-
-<div class="card">
-<input id="url" type="url" placeholder="Paste a public TikTok, Instagram, YouTube, X, or Xiaohongshu / RedNote URL">
-<button id="go" class="primary">Get transcript</button>
+<div class="source">
+<div class="input-row">
+<label class="sr-only" for="url">Video link</label>
+<input id="url" type="url" placeholder="Paste a public video URL" autocomplete="off" spellcheck="false">
+<button id="go" class="primary"><span>Transcribe</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg></button>
+</div>
 <div id="status" class="status" role="status" aria-live="polite"></div>
 </div>
+<p class="source-limit">English · On your device · First 15 minutes</p>
 
-<details class="card">
-<summary>URL blocked? Upload the saved video instead</summary>
-<div class="row" style="margin-top:12px">
+<details class="disclosure">
+<summary>Upload a file</summary>
+<div class="disclosure-body">
+<div class="upload-row">
+<label class="sr-only" for="file">Audio or video file</label>
 <input id="file" type="file" accept="video/*,audio/*">
-<button id="upload" class="secondary">Transcribe upload</button>
+<button id="upload" class="secondary">Transcribe file</button>
 </div>
-<div class="tiny">The temporary upload is deleted after transcription. TikTok fallback note: if direct extraction fails, only the public TikTok URL is sent to TikWM; no login, cookies, or browser data are sent.</div>
+<p class="upload-limit">Audio or video · Up to 250 MB</p>
+</div>
 </details>
 
-<div id="result" class="card result">
+<details class="disclosure">
+<summary>Supported links &amp; privacy</summary>
+<div class="disclosure-body">
+<p>Public HTTPS links from TikTok, Instagram, YouTube and X. RedNote is experimental; upload a saved copy if its link is blocked.</p>
+<p>Transcription runs on your device. Temporary upload copies are deleted after processing. Your original file is kept.</p>
+<p>If direct TikTok extraction fails, its public link is sent to TikWM. No browser cookies, profiles or login credentials are read.</p>
+<p>Copy for ChatGPT copies a transcript and analysis prompt to your clipboard. Nothing is sent to ChatGPT automatically.</p>
+</div>
+</details>
+
+<div id="result" class="result">
 <div class="row">
   <strong id="resultLabel">Transcript</strong>
-  <div class="row">
+  <div class="actions">
     <button id="copy" class="secondary">Copy transcript</button>
-    <button id="copyAnalysis" class="analysis">Copy for ChatGPT Analysis</button>
+    <button id="copyAnalysis" class="analysis">Copy for ChatGPT</button>
   </div>
 </div>
-<div class="stats">
-<span id="lang" class="pill"></span>
-<span id="duration" class="pill"></span>
-<span id="words" class="pill"></span>
-<span id="wpm" class="pill"></span>
-<span id="timings" class="pill"></span>
+<div class="stats" aria-label="Transcript statistics">
+<span id="duration"></span>
+<span id="words"></span>
+<span id="wpm"></span>
 </div>
 <textarea id="text" aria-label="Transcript"></textarea>
+<details class="disclosure result-details">
+<summary>Processing details</summary>
+<div class="disclosure-body">
+<p id="lang"></p>
+<p id="timings"></p>
+</div>
+</details>
 </div>
 </div>
 
@@ -99,7 +145,17 @@ function beginWork(){
   workingMessage();
   workTimer=setInterval(workingMessage,1000);
 }
-function setPhase(name){currentPhase=name;workingMessage()}
+function setPhase(name){
+  currentPhase=({
+    'Resolving the public video':'Getting audio',
+    'Converting the audio':'Preparing audio',
+    'Preparing transcription model':'Preparing transcription',
+    'Transcribing locally':'Transcribing',
+    'Trying the TikTok fallback':'Trying another source',
+    'Trying a YouTube-compatible client':'Getting audio'
+  })[name]||name;
+  workingMessage();
+}
 function endWork(message,isError=false){
   clearInterval(workTimer);
   workTimer=null;
@@ -117,7 +173,7 @@ function showSegment(segment){
   $('resultLabel').textContent='Transcript — in progress';
   $('text').value+=($('text').value?' ':'')+segment.text;
   transcribedUntil=segment.end;
-  $('lang').textContent='Language: detecting';
+  $('lang').textContent='Language: English';
   $('duration').textContent=formatTime(audioDuration);
   $('words').textContent=$('text').value.trim().split(/\s+/).length+' words so far';
   $('wpm').textContent='';
@@ -133,7 +189,7 @@ function show(d){
   $('copy').disabled=false;
   $('copyAnalysis').disabled=false;
   $('lang').textContent='Language: '+(d.language||'auto');
-  $('duration').textContent=(d.duration_seconds||0)+'s';
+  $('duration').textContent=formatTime(d.duration_seconds);
   $('words').textContent=(d.word_count||0)+' words';
   $('wpm').textContent=(d.words_per_minute||0)+' WPM';
   const times=Object.entries(d.processing_times||{}).map(([name,value])=>`${name}: ${value}s`);
@@ -182,7 +238,7 @@ $('go').onclick=async()=>{
 };
 $('upload').onclick=async()=>{
   let f=$('file').files[0];
-  if(!f)return status('Choose a video first.',true);
+  if(!f)return status('Choose an audio or video file.',true);
   beginWork();
   let fd=new FormData(); fd.append('file',f);
   try{
@@ -242,9 +298,9 @@ $('copyAnalysis').onclick=async()=>{
   if(!latestResult)return status('Transcribe a video first.',true);
   try{
     await navigator.clipboard.writeText(analysisPackage(latestResult));
-    $('copyAnalysis').textContent='Analysis prompt copied';
-    status('Copied. Paste it into ChatGPT to get the Pareto script breakdown.');
-    setTimeout(()=>$('copyAnalysis').textContent='Copy for ChatGPT Analysis',1600);
+    $('copyAnalysis').textContent='Copied';
+    status('Paste into ChatGPT for the script breakdown.');
+    setTimeout(()=>$('copyAnalysis').textContent='Copy for ChatGPT',1600);
   }catch{
     status('Clipboard access failed. Copy the transcript manually and try again.',true);
   }
